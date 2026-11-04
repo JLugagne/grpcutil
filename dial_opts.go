@@ -10,7 +10,6 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/certifi/gocertifi"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -41,17 +40,14 @@ func (v verification) asInsecureSkipVerify() bool {
 // WithSystemCerts returns a grpc.DialOption that uses the system-provided
 // certificate authority chain to verify the connection.
 //
-// If one cannot be found, this falls back to using a vendored version of
-// Mozilla's collection of root certificate authorities.
+// Binaries running on hosts without a root bundle (e.g. scratch images) can
+// embed Mozilla's roots by importing golang.org/x/crypto/x509roots/fallback.
+//
+// It returns an error only if the system pool cannot be loaded.
 func WithSystemCerts(v verification) (grpc.DialOption, error) {
 	certPool, err := x509.SystemCertPool()
 	if err != nil {
-		// Fall back to Mozilla collection of root CAs.
-		certPool, err = gocertifi.CACerts()
-		if err != nil {
-			// This library promises that this should never occur.
-			return nil, fmt.Errorf("gocertifi returned an error: %w", err)
-		}
+		return nil, errors.Join(errors.New("failed to load system cert pool"), err)
 	}
 
 	return grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
